@@ -1,0 +1,110 @@
+#!/usr/bin/env python
+import argparse # optparse is deprecated
+import sys
+from itertools import islice # slicing for iterators
+from collections import defaultdict
+
+adv  = defaultdict(list)
+adj  = defaultdict(list)
+noun = defaultdict(list)
+verb = defaultdict(list)
+
+
+def word_matches(h, ref):
+	no_syn = sum(1 for w in h if w in ref)
+
+	syn = 0
+	for w in h:
+		if w in ref:
+			syn += 1
+		elif w in adv:
+			for word in adv.get(w): 
+				if word in ref:
+					syn += 1
+		elif w in adj:
+			for word in  adj.get(w):
+				if word in ref:
+					syn += 1
+		elif w in noun:
+			for word in noun.get(w):
+				if word  in ref:
+					syn += 1
+		elif w in verb:
+			for word in verb.get(w):
+				if word in ref:
+					syn += 1
+	
+	if no_syn > syn:
+		return no_syn
+	else:
+		return syn
+	# Using the *.exc files from wordNet check if for the snynomis and return
+	# Highest between the two sums.
+
+def main():
+	parser = argparse.ArgumentParser(description='Evaluate translation hypotheses.')
+	parser.add_argument('-i', '--input', default='data/hyp1-hyp2-ref', help='input file (default data/hyp1-hyp2-ref)')
+	parser.add_argument('-n', '--num_sentences', default=None, type=int, help='Number of hypothesis pairs to evaluate')
+	parser.add_argument('-ns', '--noun_syn', default='data/noun.exc', help='noun synonym file (default data/noun.exc')
+	parser.add_argument('-vs', '--verb_syn', default='data/verb.exc', help='verb synonym file (default data/verb.exc')
+	parser.add_argument('-adjs', '--adj_syn', default='data/adj.exc', help='adjective synonym file (default data/adj.exc')
+	parser.add_argument('-advs', '--adv_syn', default='data/adv.exc', help='adverb synonym file (default data/adv.exc')
+	
+	# note that if x == [1, 2, 3], then x[:None] == x[:] == x (copy); no need for sys.maxint
+	opts = parser.parse_args()
+
+	def createSyn():
+		with open(opts.noun_syn) as f:
+			for pair in f:
+				words = pair.split()
+				for pos in xrange(1,len(words)):
+					noun[words[0]].append(words[pos])
+		with open(opts.verb_syn) as f:
+			for pair in f:
+				words = pair.split()
+				for pos in xrange(1,len(words)):
+					verb[words[0]].append(words[pos])
+		with open(opts.adj_syn) as f:
+			for pair in f:
+				words = pair.split()
+				for pos in xrange(1,len(words)):
+					adj[words[0]].append(words[pos]) 
+		with open(opts.adv_syn) as f:
+			for pair in f:
+				words= pair.split()
+				for pos in xrange(1,len(words)):
+					adv[words[0]].append(words[pos])
+
+	createSyn()
+
+    # we create a generator and avoid loading all sentences into a list
+	def sentences():
+		with open(opts.input) as f:
+			for pair in f:
+				yield [sentence.strip().split() for sentence in pair.split(' ||| ')]
+ 
+    # note: the -n option does not work in the original code
+	
+	alpha = .25
+	for h1, h2, ref in islice(sentences(), opts.num_sentences):
+		rset = set(ref)
+		h1_match = word_matches(h1, rset)
+		h2_match = word_matches(h2, rset)
+		h1_prec = h1_match/float(len(h1))
+		h1_recall = h1_match/float(len(ref))
+		h2_prec = h2_match/float(len(h2))
+		h2_recall = h2_match/float(len(ref))
+		l1 = 0
+		if ((1-alpha)*h1_recall + alpha*h1_prec) != 0:
+			l1 = h1_prec * h1_recall/((1-alpha)*h1_recall + alpha*h1_prec)
+		l2 = 0
+		if ((1-alpha)*h2_recall + alpha*h2_prec) != 0:
+			l2 = h2_prec * h2_recall/((1-alpha)*h2_recall + alpha*h2_prec)
+		print(1 if l1 > l2 else # \begin{cases}
+			(0 if l1 == l2
+			else -1)) # \end{cases}
+
+
+# convention to allow import of this file as a module
+if __name__ == '__main__':
+    main()
