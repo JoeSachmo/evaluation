@@ -86,20 +86,23 @@ def main():
         
         h1Count = defaultdict(lambda: 0)
         h1Size = defaultdict(lambda: 0)
+        h1NRecall = dict()
         for ngram in h1Set:
             n = len(ngram.split())
             if ngram in refSet:
                 h1Count[n] += h1Dict[ngram] if h1Dict[ngram]<refDict[ngram] else refDict[ngram]
             h1Size[n] += h1Dict[ngram]
-            
+        
         #sys.stderr.write("BLEU1\n")
         for x in h1Size:
+            h1NRecall[x] = (h1Count[x]+1)/(float(len(ref))+1)
             if i == 360:
                 sys.stderr.write("{} : count={}, size={}\n".format(x,h1Count[x],h1Size[x]))
-            h1Count[x] = h1Count[x]/float(h1Size[x])
+            h1Count[x] = (h1Count[x]+1)/(float(h1Size[x])+1)
         
         h2Count = defaultdict(lambda: 0)
         h2Size = defaultdict(lambda: 0)
+        h2NRecall = dict()
         for ngram in h2Set:
             n = len(ngram.split())
             if ngram in refSet:
@@ -108,34 +111,57 @@ def main():
         
         #sys.stderr.write("BLEU2\n")
         for x in h2Size:
+            h2NRecall[x] = (h2Count[x]+1)/(float(len(ref))+1)
             if i == 360:
                 sys.stderr.write("{} : count={}, size={}\n".format(x,h2Count[x],h2Size[x]))
-            h2Count[x] = h2Count[x]/float(h2Size[x])
+            h2Count[x] = (h2Count[x]+1)/(float(h2Size[x])+1)
         
-        BP1 = pow((7/float(8)),len(ref) - len(h1)) - 1 if len(ref)>len(h1) else 0
-        BP2 = pow((7/float(8)),len(ref) - len(h2)) - 1 if len(ref)>len(h2) else 0
+        BP1 = 1 - len(ref)/float(len(h1)) if len(ref)>len(h1) else 0
+        BP2 = 1 - len(ref)/float(len(h2)) if len(ref)>len(h2) else 0
         w = 1/float(4)
         
         BLEU1 = 0
         for x in h1Count:
             if h1Count[x] != 0:
-                BLEU1 += w*h1Count[x]
-        #BLEU1 += BP1
+                BLEU1 += w*log(h1Count[x])
+        BLEU1 += BP1
         #sys.stderr.write("{}\n".format(BLEU1))
         
         BLEU2 = 0
         for x in h2Count:
             if h2Count[x] != 0:
-                BLEU2 += w*h2Count[x]
-        #BLEU2 += BP2
+                BLEU2 += w*log(h2Count[x])
+        BLEU2 += BP2
         
+        rset = set(ref)
+        h1_match = word_matches(h1, rset)
+        h2_match = word_matches(h2, rset)
+        h1_prec = h1_match/float(len(h1))
+        h1_recall = h1_match/float(len(ref))
+        h2_prec = h2_match/float(len(h2))
+        h2_recall = h2_match/float(len(ref))
+        l1 = 0
+        if ((1-alpha)*h1_recall + alpha*h1_prec) != 0:
+            l1 = h1_prec * h1_recall/((1-alpha)*h1_recall + alpha*h1_prec)
+        l2 = 0
+        if ((1-alpha)*h2_recall + alpha*h2_prec) != 0:
+            l2 = h2_prec * h2_recall/((1-alpha)*h2_recall + alpha*h2_prec)
+        f1 = 0
+        if (h1_prec+h1_recall) != 0:
+            f1 = 2 * h1_prec * h1_recall/(h1_prec+h1_recall)
+        f2 = 0
+        if (h2_prec+h2_recall) != 0:
+            f2 = 2 * h2_prec * h2_recall/(h2_prec+h2_recall)
+            
+        final1 = BLEU1+l1+f1
+        final2 = BLEU2+l2+f2
         #sys.stderr.write("{}\n{}\n".format(BLEU1,BLEU2))
         #sys.stderr.write("BLEU1: {} BLEU2: {}\n".format(h2Count[2],BLEU2))
         #exit(1)
         i += 1
         
-        print(1 if BLEU1 > BLEU2 else # \begin{cases}
-                (0 if BLEU1 == BLEU2
+        print(1 if final1 > final2 else # \begin{cases}
+                (0 if final1 == final2
                     else -1)) # \end{cases}
  
 # convention to allow import of this file as a module
